@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: identity-provider
+  server:
+    port: 8080
+
+jwt:
+  secret: your-super-secret-key-min-256-bits-long-for-hs256-algorithm-change-this-in-production
+  expiration: 3600000  # 1 sat u milisekundama
+  refreshExpiration: 86400000  # 24 sata
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,info,prometheus,metrics"
+
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true

@@ -1,0 +1,15 @@
+spring:
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+  application:
+    name: service-c
+
+jwt:
+  secret: your-super-secret-key-min-256-bits-long-for-hs256-algorithm-change-this-in-production
+  expiration: 3600000
+
+server:
+  port: 8083
+
+idp-url: http://localhost:8080
+service-b-url: http://service-b:8082

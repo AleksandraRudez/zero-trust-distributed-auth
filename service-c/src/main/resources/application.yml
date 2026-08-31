@@ -1,0 +1,28 @@
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.reactive.ReactiveSecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.security.servlet.ManagementWebSecurityAutoConfiguration
+  application:
+    name: service-c
+jwt:
+  secret: your-super-secret-key-min-256-bits-long-for-hs256-algorithm-change-this-in-production
+  expiration: 3600000
+
+server:
+  port: 8083
+
+idp-url: http://identity-provider:8080
+service-b-url: http://service-b:8082
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,info,prometheus,metrics"
+  metrics:
+      distribution:
+        percentiles-histogram:
+          http.server.requests: true

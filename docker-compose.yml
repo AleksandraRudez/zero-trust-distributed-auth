@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  # Identity Provider
+  identity-provider:
+    build:
+      context: ./identity-provider
+      dockerfile: Dockerfile
+    container_name: identity-provider
+    ports:
+      - "8080:8080"
+    environment:
+      - JAVA_OPTS=-Dspring.application.name=identity-provider -Dmanagement.endpoints.web.exposure.include=health,metrics,prometheus
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+    networks:
+      - zerotrust-network
+
+  # Service A
+  service-a:
+    build:
+      context: ./service-a
+      dockerfile: Dockerfile
+    container_name: service-a
+    ports:
+      - "8081:8081"
+    environment:
+      - JAVA_OPTS=-Dspring.application.name=service-a -Dmanagement.endpoints.web.exposure.include=health,metrics,prometheus
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+    networks:
+      - zerotrust-network
+    depends_on:
+      - identity-provider
+
+  # Service B
+  service-b:
+    build:
+      context: ./service-b
+      dockerfile: Dockerfile
+    container_name: service-b
+    ports:
+      - "8082:8082"
+    environment:
+      - JAVA_OPTS=-Dspring.application.name=service-b -Dmanagement.endpoints.web.exposure.include=health,metrics,prometheus -Dservice-a-url=http://service-a:8081
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+    networks:
+      - zerotrust-network
+    depends_on:
+      - service-a
+
+  # Service C
+  service-c:
+    build:
+      context: ./service-c
+      dockerfile: Dockerfile
+    container_name: service-c
+    ports:
+      - "8083:8083"
+    environment:
+      - JAVA_OPTS=-Dspring.application.name=service-c -Dmanagement.endpoints.web.exposure.include=health,metrics,prometheus -Dservice-b-url=http://service-b:8082
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+    networks:
+      - zerotrust-network
+    depends_on:
+      - service-b
+
+  # Prometheus - Metrics storage
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: zt-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-storage:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - zerotrust-network
+    depends_on:
+      - identity-provider
+      - service-a
+      - service-b
+      - service-c
+
+  # Grafana - Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: zt-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./grafana-provisioning:/etc/grafana/provisioning
+    networks:
+      - zerotrust-network
+    depends_on:
+      - prometheus
+
+  # Loki - Log storage
+  loki:
+    image: grafana/loki:latest
+    container_name: zt-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-storage:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - zerotrust-network
+
+volumes:
+  prometheus-storage:
+  grafana-storage:
+  loki-storage:
+
+networks:
+  zerotrust-network:
+    driver: bridge

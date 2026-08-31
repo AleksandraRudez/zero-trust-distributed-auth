@@ -1,0 +1,34 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'zero-trust-system'
+
+scrape_configs:
+  # Identity Provider
+  - job_name: 'identity-provider'
+    static_configs:
+      - targets: ['identity-provider:8080']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+
+  # Service A
+  - job_name: 'service-a'
+    static_configs:
+      - targets: ['service-a:8081']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+
+  # Service B
+  - job_name: 'service-b'
+    static_configs:
+      - targets: ['service-b:8082']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+
+  # Service C
+  - job_name: 'service-c'
+    static_configs:
+      - targets: ['service-c:8083']
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s

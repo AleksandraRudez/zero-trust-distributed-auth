@@ -1,0 +1,27 @@
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.security.servlet.ManagementWebSecurityAutoConfiguration
+  application:
+    name: service-a
+
+jwt:
+  secret: your-super-secret-key-min-256-bits-long-for-hs256-algorithm-change-this-in-production
+  expiration: 3600000
+
+server:
+  port: 8081
+
+idp-url: http://localhost:8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,info,prometheus,metrics"
+
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
