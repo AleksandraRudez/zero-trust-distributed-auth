@@ -3,9 +3,44 @@ package com.zerotrust.servicec.security;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalTime;
+import java.util.Set;
+
 @Slf4j
 @Component
 public class PolicyEngine {
+
+    private final Set<String> allowedInternalCallers = new java.util.concurrent.CopyOnWriteArraySet<>(Set.of());
+
+    private static final Set<String> RECOGNIZED_CLIENT_TYPES = Set.of("USER", "SERVICE");
+
+    private volatile LocalTime accessWindowStart = LocalTime.of(0, 0);
+    private volatile LocalTime accessWindowEnd = LocalTime.of(23, 59);
+
+    public Set<String> getAllowedInternalCallers() {
+        return java.util.Collections.unmodifiableSet(allowedInternalCallers);
+    }
+
+    public void addAllowedCaller(String caller) {
+        allowedInternalCallers.add(caller);
+    }
+
+    public void removeAllowedCaller(String caller) {
+        allowedInternalCallers.remove(caller);
+    }
+
+    public LocalTime getAccessWindowStart() {
+        return accessWindowStart;
+    }
+
+    public LocalTime getAccessWindowEnd() {
+        return accessWindowEnd;
+    }
+
+    public void setAccessWindow(LocalTime start, LocalTime end) {
+        this.accessWindowStart = start;
+        this.accessWindowEnd = end;
+    }
 
     public boolean evaluatePolicy(Context context) {
         log.info("PDP (Service C): Evaluating policy for user: {}, role: {}",
@@ -38,14 +73,21 @@ public class PolicyEngine {
 
         // SERVICE može pristupiti /api/internal
         if ("SERVICE".equalsIgnoreCase(context.getRole())) {
-            if (context.getRequestPath().startsWith("/api/internal")) {
-                log.info("ALLOW: Service {} can access /api/internal", context.getUserId());
-                return true;
-            } else {
+            if (!context.getRequestPath().startsWith("/api/internal")) {
                 context.setDenialReason("Servisi mogu pristupiti samo /api/internal");
                 log.warn("DENY: Service {} cannot access {}", context.getUserId(), context.getRequestPath());
                 return false;
             }
+
+            // Policy enforcement: pristup dozvoljen samo određenim servisima
+            if (!allowedInternalCallers.contains(context.getUserId())) {
+                context.setDenialReason("Servis '" + context.getUserId() + "' nije na listi dozvoljenih pozivalaca za ovaj resurs");
+                log.warn("DENY: Service {} is not whitelisted for {}", context.getUserId(), context.getRequestPath());
+                return false;
+            }
+
+            log.info("ALLOW: Service {} can access /api/internal", context.getUserId());
+            return true;
         }
 
         context.setDenialReason("Nedozvoljeni pristup - default policy je DENY");
@@ -53,17 +95,67 @@ public class PolicyEngine {
         return false;
     }
 
-    public boolean validateContext(Context context) {
-        log.debug("Context IP: {}", context.getIpAddress());
+        public boolean validateContext(Context context) {
+        if (context == null) {
+            return false;
+        }
 
-        long currentTime = System.currentTimeMillis();
-        long expiresAt = context.getTokenExpiresAt().toEpochMilli();
-
-        if (currentTime > expiresAt) {
+        if (context.getTokenExpiresAt() == null || context.getTokenExpiresAt().isBefore(java.time.Instant.now())) {
             context.setDenialReason("Token je istekao");
             return false;
         }
 
+        if (context.getClientType() == null || !RECOGNIZED_CLIENT_TYPES.contains(context.getClientType().toUpperCase())) {
+            context.setDenialReason("Tip klijenta nije prepoznat ili nedostaje u tokenu");
+            log.warn("DENY: Unrecognized clientType '{}' for user {}", context.getClientType(), context.getUserId());
+            return false;
+        }
+        log.info("PDP: Klijent identifikovan kao tip '{}'", context.getClientType());
+
+        if (!isTrustedInternalAddress(context.getIpAddress())) {
+            context.setDenialReason("Pristup je odbijen: IP adresa nije u dozvoljenom internoj mreži");
+            return false;
+        }
+
+        if (!isAllowedAccessTime()) {
+            context.setDenialReason("Pristup je odbijen: van dozvoljenog vremenskog prozora");
+            return false;
+        }
+
+        context.setAuthorized(true);
         return true;
+    }
+
+    private boolean isTrustedInternalAddress(String ipAddress) {
+        if (ipAddress == null || ipAddress.isBlank()) {
+            return false;
+        }
+
+        String normalized = ipAddress.trim();
+        return normalized.startsWith("10.")
+                || normalized.startsWith("192.168.")
+                || normalized.startsWith("172.16.")
+                || normalized.startsWith("172.17.")
+                || normalized.startsWith("172.18.")
+                || normalized.startsWith("172.19.")
+                || normalized.startsWith("172.20.")
+                || normalized.startsWith("172.21.")
+                || normalized.startsWith("172.22.")
+                || normalized.startsWith("172.23.")
+                || normalized.startsWith("172.24.")
+                || normalized.startsWith("172.25.")
+                || normalized.startsWith("172.26.")
+                || normalized.startsWith("172.27.")
+                || normalized.startsWith("172.28.")
+                || normalized.startsWith("172.29.")
+                || normalized.startsWith("172.30.")
+                || normalized.startsWith("172.31.")
+                || normalized.equals("127.0.0.1")
+                || normalized.equals("::1");
+    }
+
+    private boolean isAllowedAccessTime() {
+        LocalTime now = LocalTime.now();
+        return !now.isBefore(accessWindowStart) && !now.isAfter(accessWindowEnd);
     }
 }

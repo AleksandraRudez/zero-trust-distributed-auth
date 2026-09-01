@@ -10,9 +10,37 @@ import java.util.Set;
 @Component
 public class PolicyEngine {
 
-    private static final Set<String> ALLOWED_INTERNAL_CALLERS = Set.of("service-b");
+    private final Set<String> allowedInternalCallers = new java.util.concurrent.CopyOnWriteArraySet<>(Set.of("service-b"));
 
     private static final Set<String> RECOGNIZED_CLIENT_TYPES = Set.of("USER", "SERVICE");
+
+    private volatile LocalTime accessWindowStart = LocalTime.of(0, 0);
+    private volatile LocalTime accessWindowEnd = LocalTime.of(23, 59);
+
+    public Set<String> getAllowedInternalCallers() {
+        return java.util.Collections.unmodifiableSet(allowedInternalCallers);
+    }
+
+    public void addAllowedCaller(String caller) {
+        allowedInternalCallers.add(caller);
+    }
+
+    public void removeAllowedCaller(String caller) {
+        allowedInternalCallers.remove(caller);
+    }
+
+    public LocalTime getAccessWindowStart() {
+        return accessWindowStart;
+    }
+
+    public LocalTime getAccessWindowEnd() {
+        return accessWindowEnd;
+    }
+
+    public void setAccessWindow(LocalTime start, LocalTime end) {
+        this.accessWindowStart = start;
+        this.accessWindowEnd = end;
+    }
 
     public boolean evaluatePolicy(Context context) {
         log.info("PDP: Evaluating policy for user: {}, role: {}", context.getUserId(), context.getRole());
@@ -46,7 +74,7 @@ public class PolicyEngine {
             }
 
             // Policy enforcement primer iz specifikacije: "pristup dozvoljen samo određenim servisima"
-            if (!ALLOWED_INTERNAL_CALLERS.contains(context.getUserId())) {
+            if (!allowedInternalCallers.contains(context.getUserId())) {
                 context.setDenialReason("Servis '" + context.getUserId() + "' nije na listi dozvoljenih pozivalaca za ovaj resurs");
                 log.warn("DENY: Service {} is not whitelisted for {}", context.getUserId(), context.getRequestPath());
                 return false;
@@ -125,6 +153,6 @@ public class PolicyEngine {
 
     private boolean isAllowedAccessTime() {
         LocalTime now = LocalTime.now();
-        return !now.isBefore(LocalTime.of(0, 0)) && !now.isAfter(LocalTime.of(23, 0));
+        return !now.isBefore(accessWindowStart) && !now.isAfter(accessWindowEnd);
     }
 }
